@@ -23,7 +23,38 @@ Before marking any task or feature complete, confirm all of the following:
 
 1. All tests pass
 2. Build is successful
-3. Linting and TypeScript compilation pass
+3. Linting and tsc-compile pass
+4. Tracer bullets for new features
+Tracer bullets comes from the Pragmatic Programmer. When building systems, you want to write code that gets you feedback as quickly as possible. Tracer bullets are small slices of functionality that go through all layers of the system, allowing you to test and validate your approach early. This helps in identifying potential issues and ensures that the overall architecture is sound before investing significant time in development.
+
+we also want to use a test driven development approach
+
+# EXECUTION: RED
+
+First, write tests that fail because the feature is not yet implemented.
+
+Run the tests to check that they fail
+
+Tests should focus on the publicly accessible interface of the system. They should test user behavior, not internal implementation details.
+
+# EXECUTION: GREEN
+
+Next, implement the minimum amount of code necessary to make the tests pass.
+
+# EXECUTION: REFACTOR
+
+Finally, ALWAYS refactor the code to improve its structure. Don't just refactor the new code — look for opportunities to improve existing code as well.
+
+Ensure the code adheres to best practices:
+
+- Code is clear and readable
+- Functions and variables are well-named
+- No duplicated code
+- Proper error handling
+- No exposed secrets or API keys
+- Input validation implemented
+- Good test coverage
+- Performance considerations addressed
 
 ## Architecture
 
