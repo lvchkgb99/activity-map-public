@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activity Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: #111;
+    }
+
+    #map { width: 100vw; height: 100vh; }
+
+    /* ── Upload card — always visible, centered on map ── */
+    #upload-card {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 2000;
+      background: rgba(14, 14, 14, 0.96);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 24px;
+      padding: 36px 36px 30px;
+      width: 460px; max-width: calc(100vw - 32px);
+      box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+    #upload-card.hidden {
+      opacity: 0; pointer-events: none;
+      transform: translate(-50%, -48%);
+    }
+
+    #upload-card h2 {
+      font-size: 20px; font-weight: 700; color: #fff;
+      margin-bottom: 5px;
+    }
+    #upload-card .subtitle {
+      font-size: 13px; color: #555; margin-bottom: 28px; line-height: 1.5;
+    }
+
+    /* Drop zone */
+    #drop-zone {
+      border: 2px dashed rgba(255,255,255,0.1);
+      border-radius: 16px; padding: 32px 20px;
+      text-align: center; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 18px;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: rgba(74,144,226,0.55);
+      background: rgba(74,144,226,0.05);
+    }
+    #drop-zone .drop-icon { font-size: 32px; margin-bottom: 10px; }
+    #drop-zone p { font-size: 14px; color: #bbb; margin-bottom: 3px; }
+    #drop-zone .drop-hint { font-size: 12px; color: #444; margin-bottom: 16px; }
+    #browse-btn {
+      background: rgba(74,144,226,0.15);
+      border: 1px solid rgba(74,144,226,0.35);
+      color: #4a90e2; border-radius: 9px;
+      padding: 8px 22px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s, border-color 0.15s;
+    }
+    #browse-btn:hover { background: rgba(74,144,226,0.27); border-color: rgba(74,144,226,0.6); }
+
+    /* How-to */
+    .how-to {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .how-to .how-title {
+      font-size: 10px; font-weight: 600; color: #444;
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+    }
+    .how-to ol { padding-left: 16px; }
+    .how-to li { font-size: 12px; color: #666; margin-bottom: 4px; line-height: 1.5; }
+    .how-to li strong { color: #999; }
+
+    /* Progress */
+    #progress-section { display: none; padding-top: 4px; }
+    #progress-bar-wrap {
+      height: 5px; background: rgba(255,255,255,0.08);
+      border-radius: 3px; overflow: hidden; margin-bottom: 14px;
+    }
+    #progress-bar {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #4a90e2, #6db3ff);
+      border-radius: 3px; transition: width 0.35s ease;
+    }
+    .progress-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    #progress-pct { font-size: 22px; font-weight: 700; color: #fff; }
+    #progress-label { font-size: 11px; color: #444; text-transform: uppercase; letter-spacing: 0.07em; }
+    #progress-msg { font-size: 13px; color: #555; line-height: 1.5; }
+    #progress-error { font-size: 13px; color: #e05252; margin-top: 10px; }
+
+    /* ── Left panel (hidden until upload done) ── */
+    #panel {
+      position: absolute; top: 16px; left: 16px; z-index: 1000;
+      background: rgba(14,14,14,0.92);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 16px; padding: 18px 16px;
+      color: #fff; width: 220px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      display: none;
+    }
+    #panel h1 { font-size: 14px; font-weight: 700; margin-bottom: 14px; }
+    .stat { display: flex; justify-content: space-between; font-size: 12px; color: #777; margin-bottom: 5px; }
+    .stat span:last-child { font-weight: 600; color: #ddd; }
+    .divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 14px 0; }
+    .section-label {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+      color: #555; text-transform: uppercase; margin-bottom: 8px;
+    }
+    .select-wrap { position: relative; }
+    .select-wrap::after {
+      content: '▾'; position: absolute; right: 10px; top: 50%;
+      transform: translateY(-50%); color: #666; font-size: 11px; pointer-events: none;
+    }
+    #type-filter {
+      width: 100%; background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 9px;
+      color: #ddd; padding: 8px 28px 8px 10px; font-size: 12px;
+      cursor: pointer; appearance: none; -webkit-appearance: none;
+      transition: border-color 0.15s;
+    }
+    #type-filter:hover { border-color: rgba(255,255,255,0.2); }
+    #type-filter:focus { outline: none; border-color: rgba(255,255,255,0.3); }
+    #type-filter option { background: #1c1c1c; color: #ddd; }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #888; margin-bottom: 5px; }
+    .swatch { width: 18px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+    .legend-item span:last-child { margin-left: auto; color: #555; font-size: 11px; }
+
+    /* ── Detail card ── */
+    #detail {
+      position: absolute; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      z-index: 1000;
+      background: rgba(14,14,14,0.95);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 18px; padding: 18px 22px;
+      color: #fff; min-width: 340px;
+      box-shadow: 0 12px 50px rgba(0,0,0,0.6);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    #detail.visible { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+    .d-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .d-icon { font-size: 22px; line-height: 1; }
+    .d-type { font-size: 17px; font-weight: 700; flex: 1; }
+    .d-close {
+      background: rgba(255,255,255,0.08); border: none; color: #888;
+      font-size: 16px; cursor: pointer; border-radius: 50%;
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      transition: background 0.12s, color 0.12s; flex-shrink: 0;
+    }
+    .d-close:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    .d-date { font-size: 12px; color: #555; margin-bottom: 16px; }
+    .d-stats { display: flex; }
+    .d-stat {
+      flex: 1; display: flex; flex-direction: column; gap: 3px;
+      padding-right: 16px; border-right: 1px solid rgba(255,255,255,0.07); margin-right: 16px;
+    }
+    .d-stat:last-child { border-right: none; padding-right: 0; margin-right: 0; }
+    .ds-label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.06em; }
+    .ds-value { font-size: 15px; font-weight: 600; }
+    .ds-value.na { color: #333; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Upload card — centered on map, always visible on load -->
+<div id="upload-card">
+  <h2>Activity Map</h2>
+  <p class="subtitle">Visualise your Apple Health workout routes on a map.<br>Your data stays on your device — nothing is stored.</p>
+
+  <div id="drop-zone">
+    <div class="drop-icon">&#128196;</div>
+    <p>Drop your <strong>export.zip</strong> here</p>
+    <p class="drop-hint">Apple Health export file</p>
+    <button id="browse-btn">Choose file</button>
+    <input type="file" id="file-input" accept=".zip" style="display:none">
+  </div>
+
+  <div class="how-to">
+    <p class="how-title">How to export from iPhone</p>
+    <ol>
+      <li>Open the <strong>Health</strong> app</li>
+      <li>Tap your profile photo (top right)</li>
+      <li>Scroll down &rarr; <strong>Export All Health Data</strong></li>
+      <li>AirDrop or save the zip to this device, then drop it above</li>
+    </ol>
+  </div>
+
+  <div id="progress-section">
+    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+    <div class="progress-meta">
+      <span id="progress-pct">0%</span>
+      <span id="progress-label">Processing</span>
+    </div>
+    <div id="progress-msg">Starting...</div>
+    <div id="progress-error"></div>
+  </div>
+</div>
+
+<!-- Left panel (shown after upload) -->
+<div id="panel">
+  <h1>Activity Map</h1>
+  <div class="stat"><span>Activities</span><span id="stat-total">—</span></div>
+  <div class="stat"><span>Date range</span><span id="stat-range">—</span></div>
+  <hr class="divider">
+  <div class="section-label">Filter by type</div>
+  <div class="select-wrap"><select id="type-filter"></select></div>
+  <hr class="divider">
+  <div class="section-label">By year</div>
+  <div id="legend"></div>
+</div>
+
+<!-- Detail card (shown on route click) -->
+<div id="detail">
+  <div class="d-header">
+    <span class="d-icon" id="d-icon"></span>
+    <span class="d-type" id="d-type"></span>
+    <button class="d-close" id="d-close">&times;</button>
+  </div>
+  <div class="d-date" id="d-date"></div>
+  <div class="d-stats">
+    <div class="d-stat"><span class="ds-label">Duration</span><span class="ds-value" id="d-dur">—</span></div>
+    <div class="d-stat"><span class="ds-label">Distance</span><span class="ds-value" id="d-dist">—</span></div>
+    <div class="d-stat"><span class="ds-label">Calories</span><span class="ds-value" id="d-cal">—</span></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const YEAR_COLORS  = { 2023: '#e05252', 2024: '#4a90e2', 2025: '#50c878', 2026: '#f5a623' };
+const YEAR_FALLBACK = '#94a3b8';
+
+const TYPE_META = {
+  HKWorkoutActivityTypeWalking:                    { label: 'Walking',  icon: '🚶' },
+  HKWorkoutActivityTypeRunning:                    { label: 'Running',  icon: '🏃' },
+  HKWorkoutActivityTypeCycling:                    { label: 'Cycling',  icon: '🚴' },
+  HKWorkoutActivityTypeHiking:                     { label: 'Hiking',   icon: '🥾' },
+  HKWorkoutActivityTypeTennis:                     { label: 'Tennis',   icon: '🎾' },
+  HKWorkoutActivityTypeCoreTraining:               { label: 'Core',     icon: '💪' },
+  HKWorkoutActivityTypeFunctionalStrengthTraining: { label: 'Strength', icon: '🏋️' },
+  HKWorkoutActivityTypeRowing:                     { label: 'Rowing',   icon: '🚣' },
+  HKWorkoutActivityTypeSwimming:                   { label: 'Swimming', icon: '🏊' },
+  HKWorkoutActivityTypeStairClimbing:              { label: 'Stairs',   icon: '🪜' },
+};
+const FALLBACK_META = { label: 'Activity', icon: '📍' };
+
+function typeMeta(type)  { return TYPE_META[type] || FALLBACK_META; }
+function yearOf(route)   { return route.startTime ? new Date(route.startTime).getFullYear() : null; }
+function colorFor(route) { return YEAR_COLORS[yearOf(route)] || YEAR_FALLBACK; }
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+function fmtDuration(s, e) {
+  if (!s || !e) return null;
+  const m = Math.round((new Date(e) - new Date(s)) / 60000);
+  if (!m || m < 0) return null;
+  return m < 60 ? `${m}m` : `${Math.floor(m/60)}h ${m%60}m`;
+}
+function fmtDistance(d, u) { return d ? `${d.toFixed(1)} ${u||'km'}` : null; }
+function fmtCalories(c)    { return c ? `${Math.round(c)} kcal`       : null; }
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: false }).setView([51.505, -0.09], 12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19,
+}).addTo(map);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+// ── Detail card ───────────────────────────────────────────────────────────────
+const detail = document.getElementById('detail');
+let activePolyline = null;
+
+function showDetail(route) {
+  const m = typeMeta(route.type);
+  document.getElementById('d-icon').textContent = m.icon;
+  document.getElementById('d-type').textContent = m.label;
+  document.getElementById('d-date').textContent = fmtDate(route.startTime);
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    el.textContent = val || '—';
+    el.className = 'ds-value' + (val ? '' : ' na');
+  };
+  set('d-dur',  fmtDuration(route.startTime, route.endTime));
+  set('d-dist', fmtDistance(route.distance, route.distanceUnit));
+  set('d-cal',  fmtCalories(route.calories));
+  detail.classList.add('visible');
+}
+
+function hideDetail() {
+  detail.classList.remove('visible');
+  if (activePolyline) {
+    activePolyline.setStyle({ weight: 2, opacity: 0.55, color: colorFor(activePolyline._route) });
+    activePolyline = null;
+  }
+}
+
+document.getElementById('d-close').addEventListener('click', hideDetail);
+map.on('click', hideDetail);
+
+// ── Draw routes ───────────────────────────────────────────────────────────────
+let allPolylines = [];
+
+function drawRoutes(routes) {
+  allPolylines = [];
+  const allPts = [];
+
+  routes.forEach(route => {
+    if (!route.points || route.points.length < 2) return;
+    const poly = L.polyline(route.points, {
+      color: colorFor(route), weight: 2, opacity: 0.55,
+      lineJoin: 'round', lineCap: 'round',
+    }).addTo(map);
+    poly._route = route;
+    allPolylines.push({ poly, route });
+    allPts.push(...route.points);
+
+    poly.on('mouseover', () => { if (poly !== activePolyline) poly.setStyle({ weight: 3.5, opacity: 0.9 }); });
+    poly.on('mouseout',  () => { if (poly !== activePolyline) poly.setStyle({ weight: 2, opacity: 0.55 }); });
+    poly.on('click', e => {
+      L.DomEvent.stopPropagation(e);
+      if (activePolyline && activePolyline !== poly) {
+        activePolyline.setStyle({ weight: 2, opacity: 0.55, color: colorFor(activePolyline._route) });
+      }
+      activePolyline = poly;
+      poly.setStyle({ weight: 4, opacity: 1, color: '#ffffff' });
+      showDetail(route);
+      map.fitBounds(poly.getBounds(), { padding: [60, 60], maxZoom: 16 });
+    });
+  });
+
+  if (allPts.length) map.fitBounds(L.latLngBounds(allPts), { padding: [20, 20] });
+}
+
+// ── Panel ─────────────────────────────────────────────────────────────────────
+function showPanel(routes) {
+  const panel = document.getElementById('panel');
+  panel.style.display = 'block';
+
+  const years = routes.map(r => yearOf(r)).filter(Boolean);
+  document.getElementById('stat-total').textContent = routes.length;
+  if (years.length) {
+    const mn = Math.min(...years), mx = Math.max(...years);
+    document.getElementById('stat-range').textContent = mn === mx ? mn : `${mn} – ${mx}`;
+  }
+
+  const select = document.getElementById('type-filter');
+  select.innerHTML = '';
+  const allOpt = document.createElement('option');
+  allOpt.value = 'all'; allOpt.textContent = 'All types';
+  select.appendChild(allOpt);
+
+  const typeCounts = {};
+  routes.forEach(r => { const t = r.type||'unknown'; typeCounts[t]=(typeCounts[t]||0)+1; });
+  Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).forEach(([type, count]) => {
+    const m = typeMeta(type);
+    const opt = document.createElement('option');
+    opt.value = type; opt.textContent = `${m.icon} ${m.label} (${count})`;
+    select.appendChild(opt);
+  });
+
+  const legend = document.getElementById('legend');
+  legend.innerHTML = '';
+  const uniqueYears = [...new Set(years)].sort();
+  const yearCounts  = {};
+  years.forEach(y => { yearCounts[y]=(yearCounts[y]||0)+1; });
+  uniqueYears.forEach(yr => {
+    const div = document.createElement('div');
+    div.className = 'legend-item';
+    div.innerHTML = `<div class="swatch" style="background:${YEAR_COLORS[yr]||YEAR_FALLBACK}"></div><span>${yr}</span><span>${yearCounts[yr]}</span>`;
+    legend.appendChild(div);
+  });
+
+  select.addEventListener('change', () => {
+    const val = select.value;
+    hideDetail();
+    allPolylines.forEach(({ poly, route }) => {
+      const show = val === 'all' || route.type === val;
+      if (show) { if (!map.hasLayer(poly)) poly.addTo(map); poly.setStyle({ opacity: 0.55, weight: 2 }); }
+      else       map.removeLayer(poly);
+    });
+  });
+}
+
+// ── Upload flow ───────────────────────────────────────────────────────────────
+const uploadCard  = document.getElementById('upload-card');
+const dropZone    = document.getElementById('drop-zone');
+const fileInput   = document.getElementById('file-input');
+const progressSec = document.getElementById('progress-section');
+const progressBar = document.getElementById('progress-bar');
+const progressPct = document.getElementById('progress-pct');
+const progressMsg = document.getElementById('progress-msg');
+const progressErr = document.getElementById('progress-error');
+
+let uploadInProgress = false;
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+document.getElementById('browse-btn').addEventListener('click', e => {
+  e.stopPropagation(); fileInput.click();
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+function setProgress(pct, msg) {
+  progressBar.style.width = pct + '%';
+  progressPct.textContent = pct + '%';
+  if (msg) progressMsg.textContent = msg;
+}
+
+async function handleFile(file) {
+  if (!file.name.toLowerCase().endsWith('.zip')) {
+    alert('Please select an export.zip file from Apple Health.');
+    return;
+  }
+
+  uploadInProgress = true;
+  dropZone.style.display   = 'none';
+  progressSec.style.display = 'block';
+  progressErr.textContent  = '';
+  setProgress(0, 'Preparing...');
+
+  const sessionId = crypto.randomUUID();
+
+  // Open SSE before uploading so we don't miss early events
+  const evtSource = new EventSource(`/api/progress/${sessionId}`);
+  evtSource.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.progress !== undefined) setProgress(data.progress, data.message);
+    if (data.done) {
+      evtSource.close();
+      uploadInProgress = false;
+      if (data.error) {
+        progressErr.textContent = 'Error: ' + data.error;
+        // Re-show drop zone so user can try again
+        dropZone.style.display    = '';
+        progressSec.style.display = 'none';
+      } else {
+        fetch(`/api/routes/${sessionId}`)
+          .then(r => r.json())
+          .then(routes => {
+            drawRoutes(routes);
+            showPanel(routes);
+            uploadCard.classList.add('hidden');
+          })
+          .catch(err => { progressErr.textContent = 'Failed to load routes: ' + err.message; });
+      }
+    }
+  };
+  evtSource.onerror = () => {
+    if (uploadInProgress) {
+      evtSource.close();
+      uploadInProgress = false;
+      progressErr.textContent = 'Connection lost. Please try again.';
+    }
+  };
+
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch(`/api/upload/${sessionId}`, { method: 'POST', body: formData });
+    if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+  } catch (err) {
+    evtSource.close();
+    uploadInProgress = false;
+    progressErr.textContent = 'Upload failed: ' + err.message;
+    dropZone.style.display    = '';
+    progressSec.style.display = 'none';
+  }
+}
+</script>
+</body>
+</html>
