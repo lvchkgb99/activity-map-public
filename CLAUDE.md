@@ -9,13 +9,21 @@ For every new feature or bug fix, follow these steps in order:
 
 1. **UX & edge case interview** — Before anything else, consider all UX edge cases and interview the user extensively about the boundaries and limits of the feature. Do not proceed until this is thorough.
 
-2. **PRD** — Create a feature-specific `prd.md` file. During drafting, flag any uncertainty and ask the user. Get explicit sign-off before moving on.
+2. **PRD** — Create a feature-specific PRD in `docs/prd-<feature-name>.md`. During drafting, flag any uncertainty and ask the user. Get explicit sign-off before moving on.
 
 3. **Implementation plan** — Once the PRD is approved, produce a detailed technical implementation plan covering: specific tools/libraries, architecture changes, performance considerations, edge cases, and design decisions. Check in on anything unclear. Get explicit sign-off before moving on.
 
 4. **Task list** — Once the implementation plan is approved, break it into the smallest possible atomic units of work as a task list. Each task should be independently actionable.
 
 5. **Execution** — Work through tasks one at a time. After completing each task, stop and verify with the user before moving to the next.
+
+## Verification
+
+Before marking any task or feature complete, confirm all of the following:
+
+1. All tests pass
+2. Build is successful
+3. Linting and TypeScript compilation pass
 
 ## Architecture
 
